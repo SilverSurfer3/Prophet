@@ -1,0 +1,86 @@
+import pandas as pd
+import numpy as np
+from prophet import Prophet
+from datetime import datetime, timedelta
+
+# New binary data
+new_data = [
+
+0,0,1,3,0,0,1,1,0,1,3,0,0,0,1,0,0,0,0,0,0,2,0,0,2,0,0,0,0
+
+
+]
+
+# Create a synthetic datetime index for today and tomorrow
+start_date = datetime.now().date()
+end_date = start_date + timedelta(days=len(new_data) - 1)  # Ensure the length matches the data
+date_range = pd.date_range(start=start_date, end=end_date, freq='d')
+
+# Create a DataFrame with datetime index and binary values
+new_data_df = pd.DataFrame({'ds': date_range, 'y': new_data})
+
+# Add moving averages of 5, 10, and 15 days
+window_sizes = [5, 20, 30]
+for window_size in window_sizes:
+    new_data_df[f'y_ma_{window_size}'] = new_data_df['y'].rolling(window=window_size, min_periods=1).mean()
+
+# Add lag features of 5, 10, and 15 days
+lags = [5, 20, 30]
+for lag in lags:
+    new_data_df[f'y_lag_{lag}'] = new_data_df['y'].shift(lag)
+
+# Add moving quantiles of 5, 10, and 15 days
+quantiles = [0.25, 0.5, 0.75]
+for window_size in window_sizes:
+    for quantile in quantiles:
+        new_data_df[f'y_quantile_{window_size}_{quantile}'] = new_data_df['y'].rolling(window=window_size,
+                                                                                       min_periods=1).quantile(quantile)
+
+# Add moving minimum and maximum of 5, 10, and 15 days
+for window_size in window_sizes:
+    new_data_df[f'y_min_{window_size}'] = new_data_df['y'].rolling(window=window_size, min_periods=1).min()
+    new_data_df[f'y_max_{window_size}'] = new_data_df['y'].rolling(window=window_size, min_periods=1).max()
+
+# Add rolling standard deviation, variance, and range
+for window_size in window_sizes:
+    new_data_df[f'y_std_{window_size}'] = new_data_df['y'].rolling(window=window_size, min_periods=1).std()
+    new_data_df[f'y_var_{window_size}'] = new_data_df['y'].rolling(window=window_size, min_periods=1).var()
+    new_data_df[f'y_range_{window_size}'] = new_data_df[f'y_max_{window_size}'] - new_data_df[f'y_min_{window_size}']
+
+# Add first difference
+new_data_df['y_diff1'] = new_data_df['y'].diff()
+
+# Add second difference
+new_data_df['y_diff2'] = new_data_df['y_diff1'].diff()
+
+# Add third difference
+new_data_df['y_diff3'] = new_data_df['y_diff2'].diff()
+
+# Add log difference
+new_data_df['y_log_diff'] = np.log(new_data_df['y']) - np.log(new_data_df['y'].shift(1))
+
+# Add rolling difference of 8 days
+new_data_df['y_rolling_diff_8'] = new_data_df['y'] - new_data_df['y'].shift(8)
+
+# Add percentage change
+new_data_df['y_pct_change'] = new_data_df['y'].pct_change() * 100
+
+# Initialize Prophet model with custom parameters
+model = Prophet(changepoint_prior_scale=0.5, seasonality_prior_scale=10.0, holidays_prior_scale=20.0)
+
+# Fit the model with data
+model.fit(new_data_df)
+
+# Make future predictions for tomorrow
+future = model.make_future_dataframe(periods=5)  # Predict for 1 day into the future (tomorrow)
+
+# Predict using the updated future dataframe
+forecast = model.predict(future)
+
+# Assuming your array is named 'new_data'
+num_data_points = len(new_data)
+print("Number of data points:", num_data_points)
+
+# Display forecast for tomorrow
+forecast_tomorrow = forecast[['ds', 'yhat']].tail(1)
+print(forecast_tomorrow)
